@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-rand() { head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c "$1"; }
+rand() { openssl rand -hex "$(( $1 / 2 ))"; }   # $1 hex chars; portable on macOS and Linux
 
 if [ ! -f .env ]; then
   cp .env.example .env

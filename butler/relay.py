@@ -74,7 +74,7 @@ class Relay(threading.Thread):
         backoff = Backoff(2.0, 20.0, healthy_after=30.0)
         while not self.stop.is_set():
             ready = self.mtx.is_ready(self.cfg.relay_source_path)
-            if ready is False:
+            if ready is not True:
                 self.state = "waiting"
                 self.stop.wait(1.0)
                 continue

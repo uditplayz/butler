@@ -90,7 +90,7 @@ class Compositor:
     def _decoder_loop(self) -> None:
         backoff = Backoff(1.0, 5.0, healthy_after=20.0)
         while not self.stop.is_set():
-            if self.mtx.is_ready(self.cfg.live_path) is False:
+            if self.mtx.is_ready(self.cfg.live_path) is not True:
                 self.stop.wait(0.5)
                 continue
             started = time.monotonic()

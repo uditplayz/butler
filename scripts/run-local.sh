@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 
 [ -f .env ] || ./scripts/init.sh
 [ -f runtime/mediamtx.yml ] || ./scripts/init.sh
+[ -f "$PWD/runtime/mediamtx.yml" ] || { echo "runtime/mediamtx.yml missing; run ./scripts/init.sh" >&2; exit 1; }
 [ -x runtime/bin/srtla_rec ] || [ "$(uname)" = Darwin ] || ./scripts/build-srtla.sh
 
 # Load .env without `source` so values containing spaces are fine.
@@ -35,9 +36,9 @@ pids=()
 cleanup() { trap - INT TERM EXIT; kill "${pids[@]}" 2>/dev/null; pkill -P $$ 2>/dev/null; wait 2>/dev/null; }
 trap cleanup INT TERM EXIT
 
-supervise mediamtx "$MEDIAMTX_BIN" runtime/mediamtx.yml & pids+=($!)
+supervise mediamtx "$MEDIAMTX_BIN" "$PWD/runtime/mediamtx.yml" & pids+=($!)
 if [ -x runtime/bin/srtla_rec ]; then   # Linux only; macOS has no srtla_rec (uses epoll)
-  supervise srtla runtime/bin/srtla_rec --srtla_port "${SRTLA_PORT:-5000}" --srt_hostname 127.0.0.1 --srt_port 8890 & pids+=($!)
+  supervise srtla "$PWD/runtime/bin/srtla_rec" --srtla_port "${SRTLA_PORT:-5000}" --srt_hostname 127.0.0.1 --srt_port 8890 & pids+=($!)
 fi
 sleep 1
 supervise butler python3 -m butler & pids+=($!)

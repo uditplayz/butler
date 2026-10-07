@@ -1,0 +1,30 @@
+# For a Linux VPS. (Docker Desktop on macOS can't do host networking - use scripts/run-local.sh there.)
+# Host networking keeps the phone's real source addresses visible to SRTLA, which bonding needs.
+x-common: &common
+  network_mode: host
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: "3"}
+
+services:
+  mediamtx:
+    <<: *common
+    image: bluenviron/mediamtx:1.11.3
+    volumes:
+      - ./runtime/mediamtx.yml:/mediamtx.yml:ro
+
+  srtla:
+    <<: *common
+    build: ./srtla
+    depends_on: [mediamtx]
+
+  butler:
+    <<: *common
+    build:
+      context: .
+      dockerfile: butler/Dockerfile
+    env_file: .env
+    depends_on: [mediamtx]
+    volumes:
+      - ./data:/data:ro   # optional: drop slate.png here and set SLATE_IMAGE=/data/slate.png

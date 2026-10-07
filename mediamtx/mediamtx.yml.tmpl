@@ -1,0 +1,54 @@
+# Rendered by scripts/init.sh into runtime/mediamtx.yml. Do not put secrets in this template.
+logLevel: info
+logDestinations: [stdout]
+
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 1024
+
+# Only the publisher account can push to "live"; everything else is local-only.
+authMethod: internal
+authInternalUsers:
+  - user: __PUBLISH_USER__
+    pass: __PUBLISH_PASS__
+    ips: []
+    permissions:
+      - action: publish
+        path: live
+  - user: any
+    pass:
+    ips: ['127.0.0.1', '::1']
+    permissions:
+      - action: read
+      - action: api
+      - action: publish
+        path: program
+
+# Control API, localhost only (used by butler to see whether the phone is connected).
+api: yes
+apiAddress: 127.0.0.1:__API_PORT__
+metrics: no
+pprof: no
+playback: no
+
+# Internal hub used by butler's ffmpeg processes. Never exposed.
+rtsp: yes
+rtspAddress: 127.0.0.1:__RTSP_PORT__
+rtspTransports: [tcp]
+
+# Ingest from OBS and other encoders (RTMP) ...
+rtmp: yes
+rtmpAddress: :1935
+rtmpEncryption: "no"
+
+# ... and from Moblin / OBS / Larix over SRT. SRTLA bonding (srtla_rec) feeds this port locally.
+srt: yes
+srtAddress: :8890
+
+hls: no
+webrtc: no
+
+paths:
+  live:
+    overridePublisher: yes  # a reconnecting phone replaces its own half-dead session
+  program:

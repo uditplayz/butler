@@ -41,6 +41,22 @@ def real_cmd(v, a):
     return comp.encoder_command(v, a)[1:-3] + NULL
 
 
+def run_real(label):
+    from butler.compositor import Compositor
+    comp = Compositor(cfg, VIDEO, None, threading.Event())
+    orig = comp.encoder_command
+    comp.encoder_command = lambda v, a: orig(v, a)[:-3] + NULL
+    t = threading.Thread(target=comp._run_encoder, daemon=True)
+    t.start()
+    time.sleep(SECONDS)
+    n = comp.stats["ticks"]
+    comp.stop.set()
+    t.join(5)
+    verdict = "OK  " if n >= FPS * (SECONDS - 1.5) else "STALL"
+    print(f"  {verdict} {label:<27} {n:>3} ticks in {SECONDS}s")
+    sys.stdout.flush()
+
+
 def run(label, feed_v, feed_a, build):
     vr, vw = os.pipe()
     ar, aw = os.pipe()
@@ -50,27 +66,28 @@ def run(label, feed_v, feed_a, build):
     os.close(vr), os.close(ar)
     ticks = [0]
 
-    def feeder():
-        nxt = time.monotonic()
-        try:
-            while True:
-                if feed_a:
-                    _all(aw, AUDIO)
-                if feed_v:
-                    _all(vw, VIDEO)
-                ticks[0] += 1
-                nxt += 1 / FPS
-                time.sleep(max(0, nxt - time.monotonic()))
-        except OSError:
-            pass
-
     def _all(fd, data):
         mv = memoryview(data)
         while mv:
             mv = mv[os.write(fd, mv):]
 
-    t = threading.Thread(target=feeder, daemon=True)
-    t.start()
+    def feeder(fd, data, count):
+        nxt = time.monotonic()
+        try:
+            while True:
+                _all(fd, data)
+                if count:
+                    ticks[0] += 1
+                nxt += 1 / FPS
+                time.sleep(max(0, nxt - time.monotonic()))
+        except OSError:
+            pass
+
+    # One thread per pipe, like butler: a single sequential writer can deadlock newer ffmpegs.
+    if feed_v:
+        threading.Thread(target=feeder, args=(vw, VIDEO, True), daemon=True).start()
+    if feed_a:
+        threading.Thread(target=feeder, args=(aw, AUDIO, not feed_v), daemon=True).start()
     time.sleep(SECONDS)
     n = ticks[0]
     proc.kill()
@@ -87,4 +104,7 @@ def run(label, feed_v, feed_a, build):
 
 print(f"ffmpeg: {cfg.ffmpeg}")
 for label, (fv, fa, build) in VARIANTS.items():
-    run(label, fv, fa, build)
+    if build is None:
+        run_real(label)
+    else:
+        run(label, fv, fa, build)

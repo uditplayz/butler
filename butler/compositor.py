@@ -22,6 +22,7 @@ import collections
 import fcntl
 import logging
 import os
+import queue
 import select
 import subprocess
 import threading
@@ -44,6 +45,46 @@ def _write_all(fd: int, data: bytes | bytearray) -> None:
     view = memoryview(data)
     while view:
         view = view[os.write(fd, view):]
+
+
+class _PipeWriter(threading.Thread):
+    """Writes queued chunks to one ffmpeg input pipe.
+
+    Audio and video each get their own writer. ffmpeg (8+) buffers little per input and may stop
+    reading one pipe until the other has advanced; a single sequential writer then deadlocks.
+    """
+
+    def __init__(self, fd: int, name: str, depth: int):
+        super().__init__(name=name, daemon=True)
+        self.fd = fd
+        self.q: queue.Queue = queue.Queue(maxsize=depth)
+        self.failed = threading.Event()
+
+    def run(self) -> None:
+        try:
+            while True:
+                data = self.q.get()
+                if data is None:
+                    return
+                _write_all(self.fd, data)
+        except OSError:
+            self.failed.set()
+
+    def put(self, data, proc: subprocess.Popen, stop: threading.Event) -> None:
+        while not stop.is_set():
+            if self.failed.is_set() or proc.poll() is not None:
+                raise BrokenPipeError(f"{self.name} pipe closed")
+            try:
+                self.q.put(data, timeout=0.5)
+                return
+            except queue.Full:
+                continue
+
+    def close(self) -> None:
+        try:
+            self.q.put_nowait(None)
+        except queue.Full:
+            pass
 
 
 class Compositor:
@@ -266,6 +307,10 @@ class Compositor:
         os.close(a_read)
         pump_lines(proc.stderr, logging.getLogger("encoder"))
         self._encoder = proc
+        v_writer = _PipeWriter(v_write, "video-pipe", depth=6)
+        a_writer = _PipeWriter(a_write, "audio-pipe", depth=400)
+        v_writer.start()
+        a_writer.start()
         started = time.monotonic()
         period = 1.0 / self.cfg.fps
         next_t = started
@@ -277,8 +322,8 @@ class Compositor:
                     self.stop.wait(next_t - now)
                     continue
                 video, audio = self.next_tick(now)
-                _write_all(a_write, audio)
-                _write_all(v_write, video)
+                a_writer.put(audio, proc, self.stop)
+                v_writer.put(video, proc, self.stop)
                 self.stats["ticks"] += 1
                 self._last_tick_done = time.monotonic()
                 next_t += period
@@ -288,12 +333,16 @@ class Compositor:
             if not self.stop.is_set():
                 self.log.error("encoder pipe closed: %s", exc)
         finally:
+            terminate(proc)  # closes ffmpeg's ends, which unblocks any writer stuck in os.write
+            v_writer.close()
+            a_writer.close()
+            v_writer.join(2)
+            a_writer.join(2)
             for fd in (v_write, a_write):
                 try:
                     os.close(fd)
                 except OSError:
                     pass
-            terminate(proc)
             self._encoder = None
         return time.monotonic() - started
 

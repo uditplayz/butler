@@ -30,10 +30,17 @@ for v in PUBLISH_USER PUBLISH_PASS; do
   [[ "${!v}" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "$v may only contain letters, digits, _ . -" >&2; exit 1; }
 done
 
+# On macOS the default dual-stack ":8890" socket ends up IPv6-only and ignores IPv4 clients, so bind
+# IPv4 explicitly there. Set SRT_BIND in .env (e.g. "[::]:8890") to override.
+SRT_ADDRESS=$(get SRT_BIND)
+if [ -z "$SRT_ADDRESS" ]; then
+  if [ "$(uname)" = Darwin ]; then SRT_ADDRESS=0.0.0.0:8890; else SRT_ADDRESS=:8890; fi
+fi
+
 mkdir -p runtime
 umask 077
 sed -e "s|__PUBLISH_USER__|$PUBLISH_USER|" -e "s|__PUBLISH_PASS__|$PUBLISH_PASS|" \
-    -e "s|__API_PORT__|${API_PORT:-9997}|" -e "s|__RTSP_PORT__|${RTSP_PORT:-8554}|" \
+    -e "s|__SRT_ADDRESS__|$SRT_ADDRESS|" -e "s|__API_PORT__|${API_PORT:-9997}|" -e "s|__RTSP_PORT__|${RTSP_PORT:-8554}|" \
     mediamtx/mediamtx.yml.tmpl > runtime/mediamtx.yml
 chmod 644 runtime/mediamtx.yml  # container user needs to read it; the directory is not exposed
 

@@ -58,18 +58,19 @@ internet, power or Mac sleeps/updates, the stream dies, because that is the sing
 CPU is not an issue: x264 `veryfast` 1080p30 is roughly one core on Apple Silicon. Don't close the lid, and
 allow incoming connections for `mediamtx` when macOS asks (or in System Settings → Network → Firewall).
 
+**macOS notes:** the SRT listener is bound to IPv4 (`0.0.0.0:8890`) because the default dual-stack socket ignores IPv4 clients on macOS. Homebrew's ffmpeg has no SRT support, so use `scripts/srt_probe.py` to test the server.
+
 **macOS and SRTLA:** the SRTLA bonding receiver (`srtla_rec`) is Linux-only (it uses `epoll`), so on a
 Mac you use plain SRT. SRT already retransmits lost packets; give it a generous latency. Bonding
 (Wi-Fi + cellular together) needs a Linux host.
 
 ## Moblin settings
 
-Settings → Streams → your stream:
+Settings → Streams → your stream (type SRT(LA)):
 
 | Field | Value |
 |---|---|
-| URL | `srt://<your-public-ip-or-hostname>:8890` (Linux with bonding: `srtla://host:5000`) |
-| Stream ID | `publish:live:<user>:<pass>` (printed by `scripts/init.sh`) |
+| URL | `srt://<ip-or-hostname>:8890?streamid=publish:live:<user>:<pass>` (the stream ID goes **in the URL**; Moblin sends an empty one otherwise and the server rejects it). Linux with bonding: `srtla://host:5000?streamid=...` |
 | Latency | **3000 ms or more** for IRL on cellular (higher = more loss tolerance, a few seconds more delay) |
 | Video | H.264 or **HEVC** (Butler converts to H.264 for the platforms), 1920x1080, 30 fps, keyframe interval 2 s |
 | Bitrate | 5–8 Mbps, with Moblin's adaptive bitrate on; Butler re-encodes to a fixed `VIDEO_BITRATE_KBPS` |

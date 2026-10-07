@@ -8,12 +8,21 @@ rand() { head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c "$1"; }
 
 if [ ! -f .env ]; then
   cp .env.example .env
-  sed -i "s|^PUBLISH_USER=.*|PUBLISH_USER=phone|; s|^PUBLISH_PASS=.*|PUBLISH_PASS=$(rand 24)|" .env
   chmod 600 .env
   echo "Created .env - now edit it and add your TWITCH_STREAM_KEY / YOUTUBE_STREAM_KEY."
 fi
 
 get() { grep -E "^$1=" .env | head -n1 | cut -d= -f2- | tr -d '\r'; }
+set_env() {  # set_env KEY VALUE - replace the line, or append it if missing
+  if grep -qE "^$1=" .env; then sed -i.bak "s|^$1=.*|$1=$2|" .env && rm -f .env.bak; else echo "$1=$2" >> .env; fi
+}
+# Fill in anything empty (also covers a hand-copied .env). Existing values are never overwritten.
+[ -n "$(get PUBLISH_USER)" ] || set_env PUBLISH_USER phone
+[ -n "$(get PUBLISH_PASS)" ] || set_env PUBLISH_PASS "$(rand 24)"
+for kv in MEDIAMTX_API_PORT=9997 MEDIAMTX_RTSP_PORT=8554; do
+  [ -n "$(get "${kv%%=*}")" ] || set_env "${kv%%=*}" "${kv#*=}"
+done
+
 PUBLISH_USER=$(get PUBLISH_USER); PUBLISH_PASS=$(get PUBLISH_PASS)
 API_PORT=$(get MEDIAMTX_API_PORT); RTSP_PORT=$(get MEDIAMTX_RTSP_PORT)
 for v in PUBLISH_USER PUBLISH_PASS; do

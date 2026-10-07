@@ -57,6 +57,13 @@ def render(cfg: Config) -> bytes:
         if frame:
             return frame
 
+    bundled = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "slate.png")
+    if os.path.isfile(bundled):
+        frame = _run(base + ["-i", bundled, "-vf", fit] + out, size)
+        if frame:
+            log.warning("drawtext unavailable in this ffmpeg; using the bundled slate image (set SLATE_IMAGE to customise)")
+            return frame
+
     log.warning("drawtext unavailable; using a plain dark slate")
     # Y=24 U=V=128 is a near-black frame in yuv420p.
     luma = w * h

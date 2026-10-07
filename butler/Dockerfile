@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-de
     && useradd --system --no-create-home --uid 10001 butler
 WORKDIR /app
 COPY butler/ /app/butler/
+COPY assets/ /app/assets/
 USER butler
 ENV PYTHONUNBUFFERED=1
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
